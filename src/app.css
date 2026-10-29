@@ -284,6 +284,22 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
+.info .dim {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.75rem;
+}
+
+.info .info-actions {
+  grid-column: 1 / -1;
+  margin-top: 0.4rem;
+}
+
+.info .info-actions .ghost {
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 0.85rem;
+}
+
 .controls {
   display: grid;
   grid-template-columns: 1.3fr 1fr 1fr;

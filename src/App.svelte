@@ -3,6 +3,7 @@
   import {
     ArController,
     checkArSupport,
+    getCameraPermission,
     loadBanner,
     type ArStatus,
     type LogEntry,
@@ -23,14 +24,25 @@
   let showSize = $state(false);
   let logs = $state<LogEntry[]>([]);
   let actionMessage = $state<string | null>(null);
+  let cameraDenied = $state(false);
 
   let overlayEl: HTMLDivElement;
   let controller: ArController | null = null;
+
+  async function refreshCameraPermission() {
+    cameraDenied = (await getCameraPermission()) === 'denied';
+  }
 
   onMount(() => {
     checkArSupport().then((result) => {
       support = result.ok ? { checking: false, ok: true } : { checking: false, ok: false, reason: result.reason };
     });
+    refreshCameraPermission();
+    // Periksa ulang saat pengguna kembali dari pengaturan situs Chrome.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshCameraPermission();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     loadBanner()
       .then((asset) => {
         aspect = asset.aspect;
@@ -39,6 +51,7 @@
       .catch(() => {
         assetError = 'Aset spanduk gagal dimuat. Muat ulang halaman.';
       });
+    return () => document.removeEventListener('visibilitychange', onVisible);
   });
 
   function addLog(entry: LogEntry) {
@@ -46,6 +59,7 @@
   }
 
   function setSize(w: number, h: number) {
+    if (Math.abs(w - widthCm) < 0.05 && Math.abs(h - heightCm) < 0.05) return;
     widthCm = w;
     heightCm = h;
     controller?.setSize(w, h);
@@ -76,7 +90,12 @@
       controller = null;
       inAr = false;
       startError = err instanceof Error ? err.message : String(err);
+      refreshCameraPermission();
     });
+  }
+
+  function snapshot() {
+    controller?.snapshot();
   }
 
   function endAr() {
@@ -172,6 +191,12 @@
     {:else if !support.ok}
       <p class="error" role="alert">{support.reason}</p>
     {/if}
+    {#if cameraDenied && !startError}
+      <p class="error" role="alert">
+        Izin kamera untuk situs ini sedang ditolak. Ketuk ikon pengaturan situs di kiri bilah alamat Chrome → Izin →
+        Kamera → Izinkan, lalu muat ulang halaman.
+      </p>
+    {/if}
     {#if startError}
       <p class="error" role="alert">{startError}</p>
     {/if}
@@ -209,26 +234,30 @@
   </section>
 </main>
 
-<!-- Root DOM overlay sesi AR. Elemen ini selalu ada di DOM dan hanya tampil saat sesi berjalan. -->
+<!--
+  Root DOM overlay sesi AR. Elemen ini selalu ada di DOM. Isinya baru ditampilkan setelah
+  sesi benar-benar berjalan (status pertama diterima), agar tidak menimpa halaman awal
+  selama dialog izin Chrome terbuka.
+-->
 <div class="overlay" class:visible={inAr} bind:this={overlayEl}>
-  {#if inAr}
+  {#if inAr && status}
     <div class="crosshair" aria-hidden="true"></div>
 
     <div class="top" use:blockXrSelect>
       <div class="status-card">
         <div class="status-row">
-          <span class="phase {status?.phase ?? 'scanning'}">{status ? phaseLabel[status.phase] : 'Menyiapkan…'}</span>
+          <span class="phase {status.phase}">{phaseLabel[status.phase]}</span>
           <button type="button" class="ghost" onclick={() => (showInfo = !showInfo)} aria-expanded={showInfo}>
             Info uji
           </button>
         </div>
-        <p class="message">{status?.message ?? 'Menyiapkan kamera dan pelacakan…'}</p>
-        {#if status?.notice}
+        <p class="message">{status.message}</p>
+        {#if status.notice}
           <p class="notice" role="status">{status.notice}</p>
         {/if}
       </div>
 
-      {#if showInfo && status}
+      {#if showInfo}
         <dl class="info">
           <dt>Sudut normal</dt>
           <dd>{fmt(status.hitAngleDeg)}° (batas {VERTICAL_TOLERANCE_DEG}°)</dd>
@@ -240,6 +269,17 @@
           <dd>{fmt(status.hitDistanceM, 2)} m</dd>
           <dt>Jarak ke spanduk</dt>
           <dd>{fmt(status.bannerDistanceM, 2)} m</dd>
+          <dt>Selisih ke dinding</dt>
+          <dd>
+            {#if status.wallGapCm === null}
+              — <span class="dim">(bidik area spanduk)</span>
+            {:else}
+              {fmt(status.wallGapCm)} cm
+              <span class="dim">{status.wallGapCm > 0.5 ? 'di depan' : status.wallGapCm < -0.5 ? 'di belakang' : 'menempel'}</span>
+            {/if}
+          </dd>
+          <dt>Koreksi anchor</dt>
+          <dd>{fmt(status.anchorShiftCm)} cm</dd>
           <dt>Ukuran</dt>
           <dd>{fmt(status.widthCm)} × {fmt(status.heightCm)} cm</dd>
           <dt>Anchor</dt>
@@ -248,6 +288,9 @@
           <dd>{status.tracking ? 'Berjalan' : 'Belum/hilang'}</dd>
           <dt>Log</dt>
           <dd>{logs.length} entri · {logs.at(-1)?.event ?? '—'}</dd>
+          <dd class="info-actions">
+            <button type="button" class="ghost" onclick={snapshot}>Catat pengukuran</button>
+          </dd>
         </dl>
       {/if}
     </div>

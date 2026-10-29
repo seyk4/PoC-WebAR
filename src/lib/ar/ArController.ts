@@ -26,6 +26,14 @@ export interface ArStatus {
   hitDistanceM: number | null;
   /** Jarak kamera ke spanduk yang sudah ditempatkan (meter). */
   bannerDistanceM: number | null;
+  /**
+   * Selisih kedalaman spanduk terhadap perkiraan dinding ARCore saat ini di titik bidik (cm).
+   * Positif = spanduk di depan dinding (melayang), negatif = di belakang dinding.
+   * Hanya dihitung bila titik bidik mengenai bidang yang sejajar dengan spanduk.
+   */
+  wallGapCm: number | null;
+  /** Besar koreksi posisi spanduk oleh anchor sejak penempatan (cm). */
+  anchorShiftCm: number | null;
   stableFrames: number;
   anchorsSupported: boolean;
   anchored: boolean;
@@ -104,14 +112,34 @@ export async function checkArSupport(): Promise<SupportResult> {
   return { ok: true };
 }
 
+export type CameraPermission = PermissionState | 'unknown';
+
+/** Membaca status izin kamera situs ini (Chrome mendukung nama izin "camera"). */
+export async function getCameraPermission(): Promise<CameraPermission> {
+  try {
+    const status = await navigator.permissions.query({ name: 'camera' as PermissionName });
+    return status.state;
+  } catch {
+    return 'unknown';
+  }
+}
+
+const CAMERA_DENIED_MESSAGE =
+  'Izin kamera untuk situs ini ditolak, sehingga sesi AR tidak dapat dimulai. Ketuk ikon pengaturan situs di kiri bilah alamat Chrome → Izin → Kamera → Izinkan, lalu muat ulang halaman.';
+
 /** Menerjemahkan kegagalan requestSession menjadi pesan yang dapat dipahami (F-10, T-03). */
-function describeStartError(err: unknown): string {
+function describeStartError(err: unknown, camera: CameraPermission): string {
   const name = err instanceof DOMException || err instanceof Error ? err.name : '';
+  // Chrome melaporkan penolakan izin kamera/AR sebagai NotSupportedError atau NotAllowedError.
+  if ((name === 'NotSupportedError' || name === 'NotAllowedError') && camera === 'denied') {
+    return CAMERA_DENIED_MESSAGE;
+  }
   switch (name) {
     case 'NotAllowedError':
-      return 'Izin kamera atau AR ditolak. Izinkan akses kamera untuk situs ini di pengaturan Chrome, lalu coba lagi.';
+      return 'Izin AR atau kamera ditolak. Tekan Mulai AR lagi lalu pilih Izinkan pada dialog Chrome.';
     case 'NotSupportedError':
-      return 'Perangkat atau browser tidak mendukung fitur AR yang dibutuhkan (hit-test).';
+      // Pemeriksaan awal sudah lolos, jadi penyebab paling umum adalah dialog izin yang ditolak.
+      return 'Sesi AR tidak dapat dimulai. Biasanya ini terjadi karena izin AR atau kamera ditolak pada dialog Chrome. Tekan Mulai AR lagi dan pilih Izinkan. Jika tetap gagal, periksa izin Kamera di pengaturan situs Chrome.';
     case 'SecurityError':
       return 'Browser menolak sesi AR karena alasan keamanan. Pastikan halaman dibuka lewat HTTPS atau localhost.';
     case 'InvalidStateError':
@@ -165,6 +193,10 @@ export class ArController {
   private tmpScale = new THREE.Vector3();
   private viewerPos = new THREE.Vector3();
   private bannerPos = new THREE.Vector3();
+  private bannerNormal = new THREE.Vector3();
+  /** Posisi pusat spanduk tepat saat ditempatkan, untuk menghitung koreksi anchor. */
+  private placedPos = new THREE.Vector3();
+  private snapshotCount = 0;
 
   constructor(callbacks: Callbacks) {
     this.cb = callbacks;
@@ -187,8 +219,13 @@ export class ArController {
         domOverlay: { root: overlayRoot },
       });
     } catch (err) {
-      this.log('session_start_failed', { error: err instanceof Error ? err.name : String(err) });
-      throw new Error(describeStartError(err));
+      const camera = await getCameraPermission();
+      this.log('session_start_failed', {
+        error: err instanceof Error ? err.name : String(err),
+        message: err instanceof Error ? err.message : null,
+        cameraPermission: camera,
+      });
+      throw new Error(describeStartError(err, camera));
     }
 
     this.session = session;
@@ -300,7 +337,9 @@ export class ArController {
 
   /** Mengganti ukuran fisik spanduk; tinggi selalu mengikuti rasio desain (F-07). */
   setSize(widthCm: number, heightCm: number): void {
-    const before = { widthCm: Math.round(this.widthM * 100), heightCm: Math.round(this.heightM * 100) };
+    // Ukuran yang sama tidak dicatat agar log tidak berisi perubahan semu.
+    if (Math.abs(widthCm / 100 - this.widthM) < 0.0005 && Math.abs(heightCm / 100 - this.heightM) < 0.0005) return;
+    const before = { widthCm: round(this.widthM * 100, 1), heightCm: round(this.heightM * 100, 1) };
     this.widthM = widthCm / 100;
     this.heightM = heightCm / 100;
     this.applySize();
@@ -408,6 +447,8 @@ export class ArController {
     let hitVertical: boolean | null = null;
     let hitDistanceM: number | null = null;
     let readyHit: { result: XRHitTestResult; position: THREE.Vector3; normal: THREE.Vector3 } | null = null;
+    let hitPosition: THREE.Vector3 | null = null;
+    let hitNormal: THREE.Vector3 | null = null;
 
     const results = tracking && this.hitSource ? frame.getHitTestResults(this.hitSource) : [];
     const hit = results[0];
@@ -425,6 +466,8 @@ export class ArController {
       hitAngleDeg = Math.asin(Math.min(1, Math.abs(normal.y))) * DEG;
       hitVertical = hitAngleDeg <= VERTICAL_TOLERANCE_DEG;
       hitDistanceM = this.viewerPos.distanceTo(position);
+      hitPosition = position;
+      hitNormal = normal;
 
       // Reticle dianggap stabil bila vertikal dan arahnya tidak banyak berubah antar-frame.
       if (hitVertical) {
@@ -452,8 +495,18 @@ export class ArController {
       this.handlePlacement(readyHit, hitAngleDeg, hitDistanceM, tracking);
     }
 
+    let wallGapCm: number | null = null;
+    let anchorShiftCm: number | null = null;
     if (this.placed) {
       this.bannerPos.setFromMatrixPosition(this.banner.matrix);
+      this.bannerNormal.setFromMatrixColumn(this.banner.matrix, 2).normalize();
+      anchorShiftCm = this.bannerPos.distanceTo(this.placedPos) * 100;
+
+      // Selisih kedalaman hanya bermakna bila titik bidik mengenai bidang yang sejajar dengan spanduk.
+      if (hitPosition && hitNormal && hitNormal.angleTo(this.bannerNormal) * DEG <= 10) {
+        const gapM = this.tmpPos.copy(this.bannerPos).sub(hitPosition).dot(this.bannerNormal) - WALL_OFFSET_M;
+        wallGapCm = gapM * 100;
+      }
     }
 
     renderer.render(this.scene, this.camera);
@@ -464,8 +517,35 @@ export class ArController {
       hitVertical,
       hitDistanceM,
       bannerDistanceM: this.placed ? this.viewerPos.distanceTo(this.bannerPos) : null,
+      wallGapCm,
+      anchorShiftCm,
     });
   };
+
+  /**
+   * Menyimpan cuplikan pengukuran ke log (dipakai untuk T-07, T-09, T-13/T-14).
+   * Catatan: drift terhadap dinding asli tidak terlihat dalam koordinat AR,
+   * sehingga tetap perlu diukur secara visual memakai selotip dan grid spanduk.
+   */
+  snapshot(): void {
+    if (!this.session) return;
+    const info = this.lastFrameInfo;
+    this.snapshotCount++;
+    this.log('snapshot', {
+      no: this.snapshotCount,
+      placed: this.placed,
+      tracking: info.tracking,
+      hitAngleDeg: round(info.hitAngleDeg, 1),
+      hitDistanceM: round(info.hitDistanceM, 3),
+      bannerDistanceM: round(info.bannerDistanceM, 3),
+      wallGapCm: round(info.wallGapCm, 1),
+      anchorShiftCm: round(info.anchorShiftCm, 1),
+      anchored: this.anchor !== null,
+      widthCm: round(this.widthM * 100, 1),
+      heightCm: round(this.heightM * 100, 1),
+    });
+    this.flash(`Pengukuran #${this.snapshotCount} dicatat.`);
+  }
 
   private updateReticle(
     position: THREE.Vector3,
@@ -545,6 +625,7 @@ export class ArController {
     this.banner.matrixWorldNeedsUpdate = true;
     this.banner.visible = true;
     this.placed = true;
+    this.placedPos.setFromMatrixPosition(this.banner.matrix);
     const id = ++this.placementId;
 
     this.log('place', {
@@ -582,8 +663,16 @@ export class ArController {
 
   private lastFrameInfo: Pick<
     ArStatus,
-    'tracking' | 'hitAngleDeg' | 'hitVertical' | 'hitDistanceM' | 'bannerDistanceM'
-  > = { tracking: false, hitAngleDeg: null, hitVertical: null, hitDistanceM: null, bannerDistanceM: null };
+    'tracking' | 'hitAngleDeg' | 'hitVertical' | 'hitDistanceM' | 'bannerDistanceM' | 'wallGapCm' | 'anchorShiftCm'
+  > = {
+    tracking: false,
+    hitAngleDeg: null,
+    hitVertical: null,
+    hitDistanceM: null,
+    bannerDistanceM: null,
+    wallGapCm: null,
+    anchorShiftCm: null,
+  };
 
   private emitStatus(force: boolean, frameInfo?: ArController['lastFrameInfo']): void {
     if (frameInfo) this.lastFrameInfo = frameInfo;
@@ -627,19 +716,27 @@ export class ArController {
       return 'Bidang yang dibidik tidak vertikal. Arahkan ke dinding.';
     }
     const far = info.hitDistanceM !== null && info.hitDistanceM > PLACEMENT_WARN_DISTANCE_M;
+    const dist = formatId(info.hitDistanceM, 1);
     if (phase === 'ready') {
       return far
-        ? `Siap, tetapi jarak ${info.hitDistanceM!.toFixed(1)} m cukup jauh. Mendekat ke 1–2 m untuk hasil terbaik, atau ketuk untuk menempatkan.`
+        ? `Siap, tetapi jarak ${dist} m cukup jauh. Mendekat ke 1–2 m untuk hasil terbaik, atau ketuk untuk menempatkan.`
         : 'Siap. Ketuk layar untuk menempatkan spanduk.';
     }
     return far
-      ? `Dinding terdeteksi pada ${info.hitDistanceM!.toFixed(1)} m. Mendekat ke 1–2 m dan tahan sebentar.`
+      ? `Dinding terdeteksi pada ${dist} m. Mendekat ke 1–2 m dan tahan sebentar.`
       : 'Dinding terdeteksi. Tahan ponsel sebentar sampai penanda berwarna hijau.';
   }
 
   private log(event: string, detail: LogEntry['detail']): void {
     this.cb.onLog({ time: new Date().toISOString(), event, detail });
   }
+}
+
+/** Format angka Indonesia (koma desimal), sama dengan panel Info uji. */
+function formatId(value: number | null, digits: number): string {
+  return value === null
+    ? '—'
+    : value.toLocaleString('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
 function round(value: number | null, digits: number): number | null {

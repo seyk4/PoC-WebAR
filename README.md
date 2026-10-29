@@ -8,13 +8,13 @@ Proof of Concept untuk menempatkan spanduk virtual **berskala fisik** pada dindi
 
 ## Menjalankan
 
-Butuh Node.js 20 atau lebih baru.
+Menggunakan [Bun](https://bun.sh).
 
 ```bash
-npm install
-npm run dev      # server pengembangan di http://localhost:5173
-npm run check    # pemeriksaan tipe
-npm run build    # hasil build di folder dist/
+bun install
+bun run dev      # server pengembangan di http://localhost:5173
+bun run check    # pemeriksaan tipe
+bun run build    # hasil build di folder dist/
 ```
 
 WebXR hanya berjalan pada **konteks aman** (HTTPS atau `localhost`). Ada dua cara membuka halaman di ponsel.
@@ -26,7 +26,7 @@ Perubahan kode langsung terlihat, dan console ponsel bisa dilihat dari laptop.
 1. Di ponsel, aktifkan **Opsi pengembang**: Pengaturan → Tentang ponsel → Informasi perangkat lunak → ketuk **Nomor versi** tujuh kali.
 2. Di Opsi pengembang, aktifkan **Debugging USB**.
 3. Hubungkan ponsel ke laptop dengan kabel USB, lalu izinkan debugging di ponsel.
-4. Jalankan `npm run dev` di laptop.
+4. Jalankan `bun run dev` di laptop.
 5. Di Chrome laptop, buka `chrome://inspect/#devices` → **Port forwarding…** → tambahkan port `5173` ke `localhost:5173` → centang **Enable port forwarding** → **Done**.
 6. Di Chrome ponsel, buka `http://localhost:5173`.
 7. Untuk melihat console dan error, klik **inspect** pada tab ponsel di `chrome://inspect`.
@@ -61,7 +61,18 @@ Base path diatur otomatis dari nama repositori melalui variabel `BASE_PATH`.
 7. **Reset** untuk memilih lokasi baru, **Akhiri AR** untuk menutup kamera.
 8. Kembali di halaman awal, **Salin** atau **Unduh .json** log uji untuk laporan.
 
-Tombol **Info uji** menampilkan sudut normal bidang, status vertikal, frame stabil, jarak ke bidang, jarak ke spanduk, ukuran, dan status anchor.
+Tombol **Info uji** menampilkan sudut normal bidang, status vertikal, frame stabil, jarak ke bidang, jarak ke spanduk, selisih ke dinding, koreksi anchor, ukuran, dan status anchor. Tombol **Catat pengukuran** di panel itu menyimpan cuplikan semua angka tersebut ke log.
+
+- **Selisih ke dinding** membandingkan pusat spanduk dengan perkiraan dinding ARCore saat ini di titik bidik (arahkan lingkaran tengah ke area spanduk). Positif berarti spanduk di depan dinding (melayang), negatif berarti di belakang. Angka ini hanya menangkap perubahan perkiraan ARCore setelah penempatan; kesalahan yang sudah ada sejak penempatan tetap harus diuji dengan selotip.
+- **Koreksi anchor** adalah besar pergeseran spanduk oleh anchor sejak ditempatkan.
+
+## Prosedur uji visual dengan selotip
+
+**T-07 (kedalaman).** Dari sekitar 1,5 m, tempel selotip tepat di salah satu sudut spanduk virtual. Berjalan mendekat dan bergeser ke kiri-kanan. Jika sudut spanduk tetap di selotip, posisinya benar dan kesan melayang berasal dari tidak adanya oklusi. Jika sudutnya bergeser terhadap selotip, ada kesalahan kedalaman.
+
+**T-09 (drift).** Tandai posisi berdiri di lantai. Pasang spanduk 300 × 100 cm (satu kotak grid = 10 cm; pada 150 × 50 cm satu kotak = 5 cm). Tempel selotip di sudut spanduk, ambil screenshot, tekan **Catat pengukuran**. Berjalan menjauh atau berputar 360°, kembali ke tanda lantai, ambil screenshot dan catat lagi. Hitung jarak sudut spanduk ke selotip memakai grid.
+
+Ulangi kedua uji pada dinding bertekstur (misalnya dinding dengan poster) untuk dibandingkan dengan tembok polos.
 
 ## Struktur
 
