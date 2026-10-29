@@ -194,6 +194,7 @@ export class ArController {
   private viewerPos = new THREE.Vector3();
   private bannerPos = new THREE.Vector3();
   private bannerNormal = new THREE.Vector3();
+  private bannerInverse = new THREE.Matrix4();
   /** Posisi pusat spanduk tepat saat ditempatkan, untuk menghitung koreksi anchor. */
   private placedPos = new THREE.Vector3();
   private snapshotCount = 0;
@@ -502,10 +503,15 @@ export class ArController {
       this.bannerNormal.setFromMatrixColumn(this.banner.matrix, 2).normalize();
       anchorShiftCm = this.bannerPos.distanceTo(this.placedPos) * 100;
 
-      // Selisih kedalaman hanya bermakna bila titik bidik mengenai bidang yang sejajar dengan spanduk.
+      // Selisih kedalaman hanya bermakna bila titik bidik mengenai bidang yang sejajar dengan spanduk
+      // DAN jatuh di dalam bingkai spanduk. Tanpa syarat kedua, benda lain yang kebetulan sejajar
+      // dinding (lemari, pintu) ikut terukur dan menghasilkan angka yang menyesatkan.
       if (hitPosition && hitNormal && hitNormal.angleTo(this.bannerNormal) * DEG <= 10) {
-        const gapM = this.tmpPos.copy(this.bannerPos).sub(hitPosition).dot(this.bannerNormal) - WALL_OFFSET_M;
-        wallGapCm = gapM * 100;
+        const local = this.tmpPos.copy(hitPosition).applyMatrix4(this.bannerInverse.copy(this.banner.matrix).invert());
+        const insideFrame = Math.abs(local.x) <= this.widthM / 2 && Math.abs(local.y) <= this.heightM / 2;
+        // Gap maksimal 50 cm: lebih dari itu hampir pasti mengenai permukaan lain, bukan dinding spanduk.
+        const gapM = -local.z - WALL_OFFSET_M;
+        if (insideFrame && Math.abs(gapM) <= 0.5) wallGapCm = gapM * 100;
       }
     }
 

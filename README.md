@@ -63,8 +63,12 @@ Base path diatur otomatis dari nama repositori melalui variabel `BASE_PATH`.
 
 Tombol **Info uji** menampilkan sudut normal bidang, status vertikal, frame stabil, jarak ke bidang, jarak ke spanduk, selisih ke dinding, koreksi anchor, ukuran, dan status anchor. Tombol **Catat pengukuran** di panel itu menyimpan cuplikan semua angka tersebut ke log.
 
-- **Selisih ke dinding** membandingkan pusat spanduk dengan perkiraan dinding ARCore saat ini di titik bidik (arahkan lingkaran tengah ke area spanduk). Positif berarti spanduk di depan dinding (melayang), negatif berarti di belakang. Angka ini hanya menangkap perubahan perkiraan ARCore setelah penempatan; kesalahan yang sudah ada sejak penempatan tetap harus diuji dengan selotip.
-- **Koreksi anchor** adalah besar pergeseran spanduk oleh anchor sejak ditempatkan.
+- **Selisih ke dinding** membandingkan bidang spanduk dengan perkiraan dinding ARCore saat ini di titik bidik. Angka hanya muncul bila lingkaran tengah berada **di dalam bingkai spanduk** dan mengenai bidang yang sejajar dengannya; selain itu tampil "—". Positif berarti spanduk di depan dinding, negatif berarti di belakang dinding. Karena tidak ada oklusi, kedua kondisi itu sama-sama terlihat seperti "melayang" saat kamera bergerak. Angka ini hanya menangkap perubahan perkiraan ARCore setelah penempatan; kesalahan yang sudah ada sejak penempatan tetap diuji dengan selotip.
+- **Koreksi anchor** adalah besar pergeseran spanduk dalam koordinat AR sejak ditempatkan, akibat ARCore memperbaiki peta ruangannya. Angka ini **bukan ukuran kesalahan**: anchor justru menggeser spanduk agar tetap di titik nyata yang sama. Angka besar menandakan pelacakan sering dikoreksi (misalnya pada tembok polos). Kesalahan posisi yang sebenarnya diukur dengan selotip (T-09).
+
+## Keterbatasan tampilan
+
+Spanduk selalu digambar di atas gambar kamera. Benda nyata di depan spanduk (lemari, orang, pintu) tidak menutupinya karena PoC tidak memakai oklusi.
 
 ## Prosedur uji visual dengan selotip
 
