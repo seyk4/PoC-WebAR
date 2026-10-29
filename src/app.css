@@ -1,0 +1,317 @@
+:root {
+  --bg: #f4efe4;
+  --surface: #fffaf0;
+  --text: #1c2026;
+  --muted: #5d6470;
+  --line: #d8ccb4;
+  --chip: #fffaf0;
+  --field: #ffffff;
+  --accent: #d64826;
+  --teal: #167874;
+  --danger: #b3261e;
+  --ink-button: #1c2026;
+  --ink-button-text: #ffffff;
+
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15181d;
+    --surface: #1f242b;
+    --text: #eef0f2;
+    --muted: #a6adb8;
+    --line: #3a414b;
+    --chip: #262c34;
+    --field: #15181d;
+    --accent: #e8643f;
+    --danger: #ff8a80;
+    --ink-button: #eef0f2;
+    --ink-button-text: #15181d;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---------- Halaman awal ---------- */
+
+.landing {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.landing header h1 {
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+}
+
+.lead {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.card h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.start {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.primary {
+  padding: 0.9rem 1rem;
+  border: none;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.steps {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.error {
+  margin: 0;
+  color: var(--danger);
+}
+
+.muted {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.log-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.log-head span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.log-list {
+  margin: 0.5rem 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.log-list code {
+  color: var(--muted);
+}
+
+.log-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.log-actions button {
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--chip);
+  color: inherit;
+}
+
+/* ---------- Overlay AR (DOM overlay) ---------- */
+
+.overlay {
+  display: none;
+}
+
+.overlay.visible {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  /* Transparan agar kamera terlihat; kontrol diberi latar sendiri. */
+  background: transparent;
+  color: #fff;
+  pointer-events: none;
+  font-size: 0.95rem;
+  --line: rgba(255, 255, 255, 0.25);
+  --chip: rgba(255, 255, 255, 0.12);
+  --field: rgba(0, 0, 0, 0.35);
+  --accent: #e8643f;
+  --danger: #ffb4ab;
+  --ink-button: #ffffff;
+  --ink-button-text: #111418;
+}
+
+.overlay .top,
+.overlay .bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.overlay .top {
+  top: 0;
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+
+.overlay .bottom {
+  bottom: 0;
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.status-card,
+.info,
+.size-panel,
+.controls {
+  pointer-events: auto;
+  background: rgba(17, 20, 24, 0.72);
+  border-radius: 14px;
+  padding: 0.75rem;
+  backdrop-filter: blur(6px);
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.phase {
+  font-weight: 700;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: #ffb020;
+  color: #111418;
+}
+
+.phase.ready {
+  background: #2ecc71;
+}
+
+.phase.placed {
+  background: #4aa3ff;
+}
+
+.message {
+  margin: 0.4rem 0 0;
+}
+
+.notice {
+  margin: 0.4rem 0 0;
+  color: #ffd166;
+  font-weight: 600;
+}
+
+.ghost {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #fff;
+  border-radius: 8px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.info {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+.info dt {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.info dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.controls button {
+  padding: 0.7rem 0.4rem;
+  border-radius: 10px;
+  border: none;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-weight: 600;
+}
+
+.controls .danger {
+  background: #c0392b;
+}
+
+.crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
